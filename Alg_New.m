@@ -5,7 +5,7 @@ clc;
 
 %% Model
 
-model = stlread('butt_weld_cropped.stl');
+model = stlread('D:\Work\VAKA - Work\WeldScanAlgorithm\butt_weld_cropped.stl');
 
 X = model.Points(:, 1);
 Y = model.Points(:, 2);
@@ -56,7 +56,7 @@ sphereRadius = 1;
 
 verticalTolerance = 0.1;
 
-figure;
+figureHandle = figure;
 pcshow(ptCloud);
 hold on;
 
@@ -94,6 +94,11 @@ hold off;
 
 %% Manual Selection
 
+uicontrol('Style', 'pushbutton', 'String', 'Continue', ...
+          'Position', [20, 20, 100, 40], 'Callback', @(~,~) uiresume(figureHandle));
+
+uiwait(figureHandle);
+
 function toggleSphereColor(sphere)
     currentColor = sphere.FaceColor;
     if isequal(currentColor, [1, 0, 1])
@@ -102,3 +107,5 @@ function toggleSphereColor(sphere)
         sphere.FaceColor = [1, 0, 1];
     end
 end
+
+%% Removing Flat Surface
