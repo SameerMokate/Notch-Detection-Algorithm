@@ -76,13 +76,13 @@ for i = 1:size(x, 1)  % This loop lays the spheres on the grid.
         
         if verticalSeamInteraction
             sphereColor = 'magenta';
-            magentaCenters = [magentaCenters; center];
+            magentaCenters = [magentaCenters; center]; %#ok<*AGROW>
         else
             sphereColor = 'black';
         end
         
         % This creates spheres and place it on grid points
-        [sx, sy, sz] = sphere;
+        [sx, sy, sz] = sphere; %#ok<*RHSFN>
         sx = sx * sphereRadius + center(1);
         sy = sy * sphereRadius + center(2);
         sz = sz * sphereRadius + center(3);
