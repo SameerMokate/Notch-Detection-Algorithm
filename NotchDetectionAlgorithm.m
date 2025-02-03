@@ -3,7 +3,7 @@ close all;
 clc;
 
 %% Load the Model
-model = stlread('D:\Work\VAKA - Work\Notch Detection Algorithm\Artificial.stl');
+model = stlread('D:\Work\VAKA - Work\Notch Detection Algorithm\butt_weld_cropped1.stl');
 % Extracts X,Y,Z points and creates a point cloud.
 X = model.Points(:, 1);
 Y = model.Points(:, 2);
@@ -20,7 +20,7 @@ camlight;
 lighting gouraud;
 
 %% Grid Generation
-gridResolution = 50; % Change -- Number of grid points on each axis.
+gridResolution = 25; % Change -- Number of grid points on each axis.
 
 % This finds a rectangular box around the point cloud by determining min
 % and max of X and Y direction to ensure the grid does not go outside the
@@ -54,8 +54,8 @@ title('3D Grid Over Weld Seam Point Cloud');
 xlabel('X'); ylabel('Y'); zlabel('Z');
 
 %% Sphere Placement
-sphereRadius = 0.2; % Change -- Sphere radius for initial weld seam and flat surface detection.
-verticalTolerance = 0.3; % Change -- Tolerance for the verticle points to determine if it is weld seam or just a small bump.
+sphereRadius = 1; % Change -- Sphere radius for initial weld seam and flat surface detection.
+verticalTolerance = 0.1; % Change -- Tolerance for the verticle points to determine if it is weld seam or just a small bump.
 
 % Thrid Display -- Black and Magenta spheres starts.
 figureHandle = figure;
@@ -189,8 +189,6 @@ ptCloudFiltered = pointCloud(filteredPoints); % This stores those valid points.
 % Fourth display to display the filter point clound (Weld seam region)
 figure;
 pcshow(ptCloudFiltered);
-title('Filtered Point Cloud');
-xlabel('X'); ylabel('Y'); zlabel('Z');
 hold on;
 
 %% Smallest Notch Detection
@@ -198,6 +196,7 @@ numMeshSteps = 7; % Change
 meshRefinementFactor = 2; % Change
 minSphereRadius = 0.2; % Change
 maxSphereRadius = 5.0; % Change
+numSmallestSpheres = 100; % Change
 
 % Takes values from filtered point cloud.
 X = ptCloudFiltered.Location(:, 1);
@@ -210,6 +209,7 @@ F = scatteredInterpolant(X, Y, Z, 'natural', 'none');
 smallestSphereRadius = inf; % This will later stores smallest sphere radius found in each step.
 smallestSphereCenter = [];
 smallestSphereStep = -1;
+smallestSpheres = [];
 
 % This loops through mesh refinement steps
 for step = 1:numMeshSteps
@@ -234,7 +234,7 @@ for step = 1:numMeshSteps
 
             % Change -- at least 3 points must touch the sphere bottom
             % surface.
-            if length(radiusCandidates) < 3, continue; end      %% The problematic part %%
+            if length(radiusCandidates) < 50, continue; end      %% Changes required %%
 
             validRadius = min(radiusCandidates); % This finds the smallest sphere from the candidates.
 
@@ -250,6 +250,16 @@ for step = 1:numMeshSteps
                 smallestSphereCenter = center;
                 smallestSphereStep = step;
             end
+
+            % This stores the candidate sphere if it's within the smallest 100.
+            smallestSpheres = [smallestSpheres; struct('radius', validRadius, 'center', center)];
+            
+            % This keeps only the smallest 100 by sorting and trimming out
+            % all the saved candidates
+            if length(smallestSpheres) > numSmallestSpheres
+                [~, sortIdx] = sort([smallestSpheres.radius]);
+                smallestSpheres = smallestSpheres(sortIdx(1:numSmallestSpheres));
+            end
         end
     end
 end
@@ -259,15 +269,24 @@ disp(['Smallest sphere radius: ', num2str(smallestSphereRadius)]);
 disp(['Smallest sphere center: [', num2str(smallestSphereCenter), ']']);
 disp(['Found at mesh step: ', num2str(smallestSphereStep)]);
 
-%% Displaying Smallest Notch
+%% Displaying Smallest Notch (The smallest sphere is displayed by red colour and white arrow and set of smallest spheres are shown by white colour.)
 if ~isempty(smallestSphereCenter)
     % Adds a large red arrow pointing to the smallest sphere centre
     quiver3(smallestSphereCenter(1), smallestSphereCenter(2), smallestSphereCenter(3), ...
-            0, 0, 10, 'Color', 'red', 'LineWidth', 3, 'MaxHeadSize', 5);
-    % Adds a red marker at the smallest sphere centre
-    plot3(smallestSphereCenter(1), smallestSphereCenter(2), smallestSphereCenter(3), ...
-          'ro', 'MarkerSize', 15, 'LineWidth', 3);
+            0, 0, 10, 'Color', 'white', 'LineWidth', 3, 'MaxHeadSize', 5);
+    % Adds a red sphere at the smallest sphere centre
+    scatter3(smallestSphereCenter(1), smallestSphereCenter(2), smallestSphereCenter(3), ...
+                 50, 'r', 'filled');
+
+    % This plots all 'numSmallestSpheres' in the same display.
+    for k = 1:length(smallestSpheres)
+    scatter3(smallestSpheres(k).center(1), ...
+             smallestSpheres(k).center(2), ...
+             smallestSpheres(k).center(3), ...
+             25, 'w', 'filled'); % White markers for all small spheres
+    end
 else
     warning('No valid sphere found for visualization.');
 end
+
 hold off;

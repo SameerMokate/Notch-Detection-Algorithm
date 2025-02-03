@@ -3,16 +3,12 @@ clearvars;
 close all;
 clc;
 
-%% Model
-
-model = stlread('D:\Work\VAKA - Work\WeldScanAlgorithm\butt_weld_cropped.stl');
-
+%% Load the Model
+model = stlread('D:\Work\VAKA - Work\WeldScanAlgorithm\butt_weld_cropped1.stl');
 X = model.Points(:, 1);
 Y = model.Points(:, 2);
 Z = model.Points(:, 3);
 ptCloud = pointCloud([X, Y, Z]);
-
-F = scatteredInterpolant(X, Y, Z, 'natural', 'none');
 
 figure;
 trisurf(model.ConnectivityList, X, Y, Z, 'FaceColor', 'yellow', 'EdgeColor', 'none');
@@ -22,10 +18,8 @@ view(3);
 camlight;
 lighting gouraud;
 
-%% Grid
-
-gridResolution = 25;
-
+%% Grid Generation
+gridResolution = 25; % Change
 xMin = min(ptCloud.Location(:,1));
 xMax = max(ptCloud.Location(:,1));
 yMin = min(ptCloud.Location(:,2));
@@ -34,78 +28,157 @@ yMax = max(ptCloud.Location(:,2));
 [x, y] = meshgrid(linspace(xMin, xMax, gridResolution), ...
                   linspace(yMin, yMax, gridResolution));
 
+F = scatteredInterpolant(X, Y, Z, 'natural', 'none');
 z = F(x, y);
+
 gridPoints = [x(:), y(:), z(:)];
 
-figure;
-pcshow(ptCloud);
-hold on;
-
-for i = 1:gridResolution
-    plot3(x(:, i), y(:, i), z(:, i), 'k-', 'LineWidth', 1.5);
-    plot3(x(i, :), y(i, :), z(i, :), 'k-', 'LineWidth', 1.5);
-end
-
-plot3(gridPoints(:,1), gridPoints(:,2), gridPoints(:,3), 'r.', 'MarkerSize', 10);
-title('3D Grid Over Weld Seam Point Cloud');
-xlabel('X'); ylabel('Y'); zlabel('Z');
-
-%% Sphere
-
-sphereRadius = 1;
-
-verticalTolerance = 0.1;
-
 figureHandle = figure;
-pcshow(ptCloud);
+trisurf(model.ConnectivityList, X, Y, Z, 'FaceColor', 'yellow', 'EdgeColor', 'none');
+title('Weld Seam (Magenta) vs Flat Surface (Black)');
+xlabel('X'); ylabel('Y'); zlabel('Z');
+view(3);
+camlight;
+lighting gouraud;
 hold on;
 
-sphereHandles = gobjects(size(x));
+%% Curvature-Based Weld Seam Detection
+curvatureThreshold = 0.01; % Curvature threshold to classify weld seam vs flat surface
+meshColors = zeros(size(gridPoints, 1), 3); % RGB colors for the mesh points
+curvatureValues = []; % Store curvature for each point
 
 for i = 1:size(x, 1)
-    for j = 1:size(x, 2)
+    % Extract mesh line points
+    linePoints = [x(i, :)', y(i, :)', z(i, :)'];
 
-        center = [x(i, j), y(i, j), z(i, j)];
+    % Compute curvature for the line
+    curvatures = calculateCurvature(linePoints);
 
-        distances = sqrt((X - center(1)).^2 + (Y - center(2)).^2 + (Z - center(3)).^2);
-        
-        verticalSeamInteraction = any(distances < sphereRadius & abs(Z - center(3)) > verticalTolerance);
-
-        if verticalSeamInteraction
-            sphereColor = 'magenta';
+    % Classify points
+    for j = 1:size(linePoints, 1)
+        if j > 1 && j < size(linePoints, 1) - 1
+            if curvatures(j - 1) > curvatureThreshold
+                % Weld seam
+                meshColors((i - 1) * size(x, 2) + j, :) = [1, 0, 1]; % Magenta
+            else
+                % Flat surface
+                meshColors((i - 1) * size(x, 2) + j, :) = [0, 0, 0]; % Black
+            end
+            curvatureValues = [curvatureValues; curvatures(j - 1)]; %#ok<AGROW>
         else
-            sphereColor = 'black';
+            % Boundary points default to flat surface
+            meshColors((i - 1) * size(x, 2) + j, :) = [0, 0, 0]; % Black
         end
-
-        [sx, sy, sz] = sphere;
-        sx = sx * sphereRadius + center(1);
-        sy = sy * sphereRadius + center(2);
-        sz = sz * sphereRadius + center(3);
-        h = surf(sx, sy, sz, 'FaceColor', sphereColor, 'EdgeColor', 'none', ...
-                    'ButtonDownFcn', @(src, event) toggleSphereColor(src), ...
-                    'HitTest', 'on', 'PickableParts', 'all');
-        sphereHandles(i, j) = h;
     end
 end
 
-title('Grid Points with Spheres for Flat Surface Detection');
-xlabel('X'); ylabel('Y'); zlabel('Z');
-hold off;
-
-%% Manual Selection
+% Plot mesh points over the geometry
+sphereHandles = gobjects(size(gridPoints, 1), 1);
+for i = 1:size(gridPoints, 1)
+    sphereHandles(i) = scatter3(gridPoints(i, 1), gridPoints(i, 2), gridPoints(i, 3), ...
+                                50, meshColors(i, :), 'filled', ...
+                                'ButtonDownFcn', @(src, ~) toggleSphereColor(src, i));
+end
 
 uicontrol('Style', 'pushbutton', 'String', 'Continue', ...
           'Position', [20, 20, 100, 40], 'Callback', @(~,~) uiresume(figureHandle));
 
 uiwait(figureHandle);
 
-function toggleSphereColor(sphere)
-    currentColor = sphere.FaceColor;
-    if isequal(currentColor, [1, 0, 1])
-        sphere.FaceColor = 'black';
-    else
-        sphere.FaceColor = [1, 0, 1];
+% Finalize adjusted weld seam points
+adjustedWeldSeam = all(meshColors == [1, 0, 1], 2);
+adjustedWeldSeamPoints = gridPoints(adjustedWeldSeam, :);
+
+%% Sphere Placement (Smallest Sphere Detection)
+numMeshSteps = 7; % Change
+meshRefinementFactor = 2; % Change
+minSphereRadius = 0.02; % Change
+maxSphereRadius = 5.0; % Change
+
+X = adjustedWeldSeamPoints(:, 1);
+Y = adjustedWeldSeamPoints(:, 2);
+Z = adjustedWeldSeamPoints(:, 3);
+
+F = scatteredInterpolant(X, Y, Z, 'natural', 'none');
+
+smallestSphereRadius = inf;
+smallestSphereCenter = [];
+smallestSphereStep = -1;
+
+for step = 1:numMeshSteps
+    gridResolution = 25 + step * meshRefinementFactor;
+    [xMesh, yMesh] = meshgrid(linspace(min(X), max(X), gridResolution), ...
+                              linspace(min(Y), max(Y), gridResolution));
+    zMesh = F(xMesh, yMesh);
+
+    for i = 1:size(xMesh, 1)
+        for j = 1:size(xMesh, 2)
+            center = [xMesh(i, j), yMesh(i, j), zMesh(i, j)];
+            distances = sqrt((X - center(1)).^2 + (Y - center(2)).^2 + (Z - center(3)).^2);
+
+            radiusCandidates = distances(distances > minSphereRadius & distances < maxSphereRadius);
+            if length(radiusCandidates) < 3, continue; end
+
+            validRadius = min(radiusCandidates);
+            if validRadius < smallestSphereRadius
+                smallestSphereRadius = validRadius;
+                smallestSphereCenter = center;
+                smallestSphereStep = step;
+            end
+        end
     end
 end
 
-%% Removing Flat Surface
+disp(['Smallest sphere radius: ', num2str(smallestSphereRadius)]);
+disp(['Smallest sphere center: [', num2str(smallestSphereCenter), ']']);
+disp(['Found at mesh step: ', num2str(smallestSphereStep)]);
+
+%% Visualizing Smallest Sphere
+if ~isempty(smallestSphereCenter)
+    figure;
+    trisurf(model.ConnectivityList, X, Y, Z, 'FaceColor', 'yellow', 'EdgeColor', 'none');
+    hold on;
+    [sx, sy, sz] = sphere;
+    sx = sx * smallestSphereRadius + smallestSphereCenter(1);
+    sy = sy * smallestSphereRadius + smallestSphereCenter(2);
+    sz = sz * smallestSphereRadius + smallestSphereCenter(3);
+    surf(sx, sy, sz, 'FaceColor', 'magenta', 'EdgeColor', 'none', 'FaceAlpha', 0.7);
+    title('Smallest Sphere (Notch) on Weld Seam');
+    xlabel('X'); ylabel('Y'); zlabel('Z');
+    hold off;
+end
+
+%% Toggle Function for Manual Selection
+function toggleSphereColor(src, index)
+    currentColor = src.CData;
+    if isequal(currentColor, [1, 0, 1]) % Magenta
+        meshColors(index, :) = [0, 0, 0]; % Change to black
+        src.CData = [0, 0, 0];
+    else % Black
+        meshColors(index, :) = [1, 0, 1]; % Change to magenta
+        src.CData = [1, 0, 1];
+    end
+end
+
+%% Curvature Calculation Function
+function curvatureValues = calculateCurvature(points)
+    dx = diff(points(:, 1));
+    dy = diff(points(:, 2));
+    dz = diff(points(:, 3));
+
+    ddx = diff(dx);
+    ddy = diff(dy);
+    ddz = diff(dz);
+
+    dx_mid = dx(1:end-1);
+    dy_mid = dy(1:end-1);
+    dz_mid = dz(1:end-1);
+
+    num = sqrt((ddy .* dz_mid - ddz .* dy_mid).^2 + ...
+               (ddz .* dx_mid - ddx .* dz_mid).^2 + ...
+               (ddx .* dy_mid - ddy .* dx_mid).^2);
+    denom = (dx_mid.^2 + dy_mid.^2 + dz_mid.^2).^(3/2);
+
+    denom(denom == 0) = inf;
+    curvatureValues = num ./ denom;
+end
