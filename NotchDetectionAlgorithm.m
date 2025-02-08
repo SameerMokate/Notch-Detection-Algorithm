@@ -193,7 +193,7 @@ hold on;
 
 %% Smallest Notch Detection
 numMeshSteps = 7; % Change
-meshRefinementFactor = 2; % Change
+meshRefinementFactor = 5; % Change
 minSphereRadius = 0.2; % Change
 maxSphereRadius = 5.0; % Change
 numSmallestSpheres = 100; % Change
@@ -213,7 +213,7 @@ smallestSpheres = [];
 
 % This loops through mesh refinement steps
 for step = 1:numMeshSteps
-    gridResolution = 25 + step * meshRefinementFactor; % Change -- increases mesh resolution
+    gridResolution = 50 + step * meshRefinementFactor; % Change -- increases mesh resolution
 
     % Same as above. Generates equally distant grid.
     [xMesh, yMesh] = meshgrid(linspace(min(X), max(X), gridResolution), ...
@@ -231,12 +231,32 @@ for step = 1:numMeshSteps
             % range and stores the ones which satisfy this condition as
             % potential candidates.
             radiusCandidates = distances(distances > minSphereRadius & distances < maxSphereRadius);
-
-            % Change -- at least 3 points must touch the sphere bottom
-            % surface.
-            if length(radiusCandidates) < 50, continue; end      %% Changes required %%
+            if isempty(radiusCandidates)
+                continue;
+            end
 
             validRadius = min(radiusCandidates); % This finds the smallest sphere from the candidates.
+
+            delta = 0.05; % Change but be careful -- distance near the surface
+            deltaZ = 0.01; % Change -- distance near the bottom surface
+            desiredThreshold = 5;  % Change -- number of points need to touch the bottom surface of the sphere.
+            
+            % This calculates which points are near the candidate radius
+            % surface (All around).
+            nearSurface = abs(distances - validRadius) < delta;
+            
+            % This calculates which points are near the bottom surface of
+            % the sphere (Only near bottom center).
+            nearBottom = abs(Z - (center(3) - validRadius)) < deltaZ;
+            
+            % This only takes those points which satisfy both conditions.
+            touchingIndices = nearBottom;
+            
+            % Checks if mininum point are touching the sphere surface and
+            % if yes, then stores them or else does not store them.
+            if sum(touchingIndices) < desiredThreshold
+                continue;
+            end
 
              % This stores smallest sphere found in each mesh step and
              % updates it if it finds smaller than the current sphere in upcoming steps.
