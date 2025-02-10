@@ -235,22 +235,22 @@ for step = 1:numMeshSteps
                 continue;
             end
 
-            validRadius = min(radiusCandidates); % This finds the smallest sphere from the candidates.
+            candidateRadius = min(radiusCandidates); % This finds the smallest sphere from the candidates.
 
-            delta = 0.05; % Change but be careful -- distance near the surface
-            deltaZ = 0.01; % Change -- distance near the bottom surface
+            delta = 0.05; % Change but be careful -- distance near the surface.
+            deltaZ = 0.01; % Change -- distance near the bottom surface.
             desiredThreshold = 5;  % Change -- number of points need to touch the bottom surface of the sphere.
             
             % This calculates which points are near the candidate radius
             % surface (All around).
-            nearSurface = abs(distances - validRadius) < delta;
+            nearSurface = abs(distances - candidateRadius) < delta;
             
             % This calculates which points are near the bottom surface of
             % the sphere (Only near bottom center).
-            nearBottom = abs(Z - (center(3) - validRadius)) < deltaZ;
+            nearBottom = abs(Z - (center(3) - candidateRadius)) < deltaZ;
             
             % This only takes those points which satisfy both conditions.
-            touchingIndices = nearBottom;
+            touchingIndices = nearSurface & nearBottom;
             
             % Checks if mininum point are touching the sphere surface and
             % if yes, then stores them or else does not store them.
@@ -260,19 +260,19 @@ for step = 1:numMeshSteps
 
              % This stores smallest sphere found in each mesh step and
              % updates it if it finds smaller than the current sphere in upcoming steps.
-            if validRadius < smallestSphereRadius
+            if candidateRadius < smallestSphereRadius
 
                 % Stores the values at each steps and update them if
                 % smaller than current sphere is found in next step until
                 % the end step. If smaller than current sphere is not
                 % found, then these keep the value from last step.
-                smallestSphereRadius = validRadius;
+                smallestSphereRadius = candidateRadius;
                 smallestSphereCenter = center;
                 smallestSphereStep = step;
             end
 
             % This stores the candidate sphere if it's within the smallest 100.
-            smallestSpheres = [smallestSpheres; struct('radius', validRadius, 'center', center)];
+            smallestSpheres = [smallestSpheres; struct('radius', candidateRadius, 'center', center)];
             
             % This keeps only the smallest 100 by sorting and trimming out
             % all the saved candidates
